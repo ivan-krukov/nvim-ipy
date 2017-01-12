@@ -5,21 +5,13 @@ import os, sys
 import json
 import re
 import neovim
+from neovim.api import NvimError
 
-try:
-    from jupyter_client import KernelManager
-    from jupyter_client.threaded import ThreadedKernelClient
-    from jupyter_core.application import JupyterApp
-    from jupyter_client.consoleapp import JupyterConsoleApp
-    from jupyter_core import version_info
-    kind = "Jupyter" # :)
-except:
-    from IPython.kernel import KernelManager
-    from IPython.kernel.threaded import ThreadedKernelClient
-    from IPython.core.application import BaseIPythonApplication as JupyterApp
-    from IPython.consoleapp import IPythonConsoleApp as JupyterConsoleApp
-    from IPython import version_info
-    kind = "IPython" # plz upgrade
+from jupyter_client import KernelManager
+from jupyter_client.threaded import ThreadedKernelClient
+from jupyter_core.application import JupyterApp
+from jupyter_client.consoleapp import JupyterConsoleApp
+from jupyter_core import version_info
 
 import greenlet
 from traceback import format_exc
@@ -57,6 +49,7 @@ class JupyterVimApp(JupyterApp, JupyterConsoleApp):
             self.kernel_client = self.kernel_manager.client()
         else:
             self.kernel_client = self.kernel_client_class(
+                                session=self.session,
                                 ip=self.ip,
                                 transport=self.transport,
                                 shell_port=self.shell_port,
@@ -188,10 +181,11 @@ class IPythonPlugin(object):
     def connect(self, argv):
         vim = self.vim
 
-        self.ip_app = JupyterVimApp()
-        # messages will be recieved in IPython's event loop threads
+        self.ip_app = JupyterVimApp.instance()
+        # messages will be recieved in Jupyter's event loop threads
         # so use the async self
         self.ip_app.initialize(Async(self), argv)
+        self.ip_app.start()
         self.kc = self.ip_app.kernel_client
         self.km = self.ip_app.kernel_manager
         self.has_connection = True
@@ -210,7 +204,7 @@ class IPythonPlugin(object):
             vdesc += '-' + ipy_version[3]
         banner = [
                 "nvim-ipy: Jupyter shell for Neovim",
-                "{} {}".format(kind, vdesc),
+                "Jupyter {}".format(vdesc),
                 "language: {} {}".format(lang, langver),
                 "",
                 ]
@@ -273,7 +267,7 @@ class IPythonPlugin(object):
 
         reply = self.waitfor(self.kc.execute(code,silent=silent))
         content = reply['content']
-        payload = content['payload']
+        payload = content.get('payload',())
         for p in payload:
             if p.get("source") == "page":
                 # TODO: if this is long, open separate window
@@ -317,10 +311,19 @@ class IPythonPlugin(object):
         reply = self.waitfor(self.kc.inspect(word, None, level))
 
         c = reply['content']
-        if not c['found']:
-            self.append_outbuf("not found: {}\n".format(o['name']))
-            return
-        self.append_outbuf("\n"+c['data']['text/plain']+"\n")
+        if c["status"] == "error":
+            l = self.append_outbuf("\nerror when inspecting {}: {}\n".format(word, c.get("ename", "")))
+            if self.do_highlight:
+                self.buf.add_highlight("Error", l+1, 0, -1)
+            if "traceback" in c:
+                self.append_outbuf('\n'.join(c['traceback'])+"\n")
+
+        elif not c.get('found'):
+            l = self.append_outbuf("\nnot found: {}\n".format(word))
+            if self.do_highlight:
+                self.buf.add_highlight("WarningMsg", l+1, 0, -1)
+        else:
+            self.append_outbuf("\n"+c['data']['text/plain']+"\n")
 
     @neovim.function("IPyInterrupt")
     def ipy_interrupt(self, args):
@@ -370,6 +373,7 @@ class IPythonPlugin(object):
 
 
     def on_shell_msg(self, m):
+        self.last_msg = m
         debug('shell %s: %r', m['msg_type'], m['content'])
         msg_id = m['parent_header']['msg_id']
         try:
@@ -388,4 +392,16 @@ class IPythonPlugin(object):
         self.disp_status("DEAD")
 
     def on_stdin_msg(self, msg):
-        self.kc.input(self.vim.funcs.input("(IPy) " + msg["content"]["prompt"]))
+        self.last_msg = msg
+        try:
+            res = self.vim.funcs.input("(IPy) " + msg["content"]["prompt"])
+        except NvimError:
+            #TODO(nvim) return exceptions precisely
+            # for now assume keyboard interrupt
+            self.ipy_interrupt([])
+            return
+
+        if self.last_msg is msg:
+            # from jupyter_console, input should be considered to be interrupted
+            # if there was another message
+            self.kc.input(res)
