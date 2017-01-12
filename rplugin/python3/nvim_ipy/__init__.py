@@ -132,6 +132,7 @@ class IPythonPlugin(object):
             return
         w0 = vim.current.window
         vim.command(":new")
+        vim.command(":setlocal nonumber")
         buf = vim.current.buffer
         buf.options["swapfile"] = False
         buf.options["buftype"] = "nofile"
