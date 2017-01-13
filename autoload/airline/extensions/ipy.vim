@@ -3,6 +3,10 @@
 
 scriptencoding utf-8
 
+if !exists(':AirlineToggle')
+  finish
+endif
+
 " Due to some potential rendering issues, the use of the `space` variable is
 " recommended.
 let s:spc = g:airline_symbols.space
