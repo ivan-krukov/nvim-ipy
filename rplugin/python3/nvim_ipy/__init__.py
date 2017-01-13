@@ -2,6 +2,7 @@ from __future__ import print_function, division
 from functools import partial, wraps
 from collections import deque
 import os, sys
+import time, datetime
 import json
 import re
 import neovim
@@ -139,6 +140,7 @@ class IPythonPlugin(object):
         buf.name = "[jupyter]"
         vim.current.window = w0
         self.buf = buf
+        self.buf_state = "[ Ready ]"
         self.hl_handler = AnsiCodeProcessor()
         self.hl_handler.bold_text_enabled = True
 
@@ -225,7 +227,7 @@ class IPythonPlugin(object):
                 return #reopen window?
 
         if self.do_filetype:
-            vim.command("set ft={}".format(lang))
+            vim.command("set ft={}.jupyter".format(lang))
 
         vim.current.window = w0
 
@@ -266,6 +268,8 @@ class IPythonPlugin(object):
                     self.km.start_kernel(**self.km._launch_args)
             return
 
+        start_time = time.time()
+        self.buf_state = "[ Busy ]({})".format(datetime.datetime.now().strftime("%H:%M:%S"))
         reply = self.waitfor(self.kc.execute(code,silent=silent))
         content = reply['content']
         payload = content.get('payload',())
@@ -273,6 +277,11 @@ class IPythonPlugin(object):
             if p.get("source") == "page":
                 # TODO: if this is long, open separate window
                 self.append_outbuf(p['text'])
+        self.buf_state = "[ Ready ]({:.4f}s elapsed)".format(time.time() - start_time) 
+
+    @neovim.function("IPyStatus", sync=True)
+    def ipy_status(self, args):
+        return self.buf_state
 
     @neovim.function("IPyComplete")
     def ipy_complete(self,args):

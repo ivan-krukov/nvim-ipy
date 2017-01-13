@@ -3,10 +3,12 @@ This is a Jupyter front-end for Neovim, partially based on [ivanov/vim-ipython](
 
 It doesn't have all features of `vim-ipython`, but it has better support for long-running commands that continously produce output, for instance this silly example:
 
-    from time import sleep
-    for i in range(10):
-        sleep(0.5)
-        print(i)
+```python
+from time import sleep
+for i in range(10):
+    sleep(0.5)
+    print(i)
+```
 
 ## Connecting/starting kernel
 `:IPython <args>` is interpreted just like the command line `jupyter console <args>`, for instance:

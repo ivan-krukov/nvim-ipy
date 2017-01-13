@@ -8,6 +8,7 @@ inoremap <Plug>(IPy-Complete) <c-o>:<c-u>call IPyComplete()<cr>
 noremap <Plug>(IPy-WordObjInfo) :call IPyObjInfo(<SID>get_current_word(), 0)<cr>
 noremap <Plug>(IPy-Interrupt) :call IPyInterrupt()<cr>
 noremap <Plug>(IPy-Terminate) :call IPyTerminate()<cr>
+noremap <Plug>(IPy-Status) :call IPyStatus()<cr>
 
 " make this overrideable
 hi IPyIn ctermfg=green cterm=bold guifg=LimeGreen gui=bold
